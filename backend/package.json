@@ -1,0 +1,27 @@
+{
+  "name": "payfac",
+  "version": "1.0.0",
+  "description": "payment facilatator",
+  "main": "server.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kculz/payfac.git"
+  },
+  "keywords": [
+    "process",
+    "payments"
+  ],
+  "author": "kudzai munyama",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/kculz/payfac/issues"
+  },
+  "homepage": "https://github.com/kculz/payfac#readme",
+  "devDependencies": {
+    "@greycode/env_init": "^1.0.5",
+    "@greycode/gitignore_init": "^0.0.2"
+  }
+}
