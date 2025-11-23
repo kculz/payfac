@@ -9,7 +9,7 @@
 const bcrypt = require('bcryptjs');
 const userRepository = require('../../database/repositories/user.repository');
 const balanceService = require('../balance/balance.service');
-const logger = require('../../shared/utils/logger');
+const logger = require('../../src/shared/utils/logger');
 const config = require('../../src/config/environment.config');
 const {
   generateTokens,

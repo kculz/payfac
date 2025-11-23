@@ -7,7 +7,7 @@
  */
 
 const Joi = require('joi');
-const { commonSchemas, businessName } = require('../../../src/shared/middleware/validation');
+const { commonSchemas, businessName } = require('../../../src/shared/middleware/validation.middleware');
 
 /**
  * Register validation schema
