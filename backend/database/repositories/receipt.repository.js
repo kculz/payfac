@@ -7,7 +7,7 @@
  */
 
 const BaseRepository = require('./base.repository');
-const logger = require('../../shared/utils/logger');
+const logger = require('../../src/shared/utils/logger');
 
 class ReceiptRepository extends BaseRepository {
   constructor() {

@@ -7,10 +7,10 @@
  * Location: src/database/repositories/transactionRepository.js
  */
 
-const BaseRepository = require('./baseRepository');
-const { prisma } = require('../../config/database');
-const logger = require('../../shared/utils/logger');
-const { DatabaseError } = require('../../shared/utils/ApiError');
+const BaseRepository = require('./base.repository');
+const { prisma } = require('../../src/config/database.config');
+const logger = require('../../src/shared/utils/logger');
+const { DatabaseError } = require('../../src/shared/utils/ApiError');
 
 class TransactionRepository extends BaseRepository {
   constructor() {

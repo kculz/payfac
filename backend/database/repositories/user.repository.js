@@ -7,9 +7,9 @@
  * Location: src/database/repositories/userRepository.js
  */
 
-const BaseRepository = require('./baseRepository');
-const { ConflictError, NotFoundError } = require('../../shared/utils/ApiError');
-const logger = require('../../shared/utils/logger');
+const BaseRepository = require('./base.repository');
+const { ConflictError, NotFoundError } = require('../../src/shared/utils/ApiError');
+const logger = require('../../src/shared/utils/logger');
 
 class UserRepository extends BaseRepository {
   constructor() {

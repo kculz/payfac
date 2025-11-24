@@ -10,7 +10,7 @@
 const winston = require('winston');
 const path = require('path');
 const fs = require('fs');
-const config = require('../../config/environment');
+const config = require('../../config/environment.config');
 
 // Ensure log directory exists
 if (config.logging.fileLogging) {

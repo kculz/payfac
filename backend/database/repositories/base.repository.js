@@ -7,9 +7,9 @@
  * Location: src/database/repositories/baseRepository.js
  */
 
-const { prisma } = require('../../config/database');
-const logger = require('../../shared/utils/logger');
-const { DatabaseError, NotFoundError } = require('../../shared/utils/ApiError');
+const { prisma } = require('../../src/config/database.config');
+const logger = require('../../src/shared/utils/logger');
+const { DatabaseError, NotFoundError } = require('../../src/shared/utils/ApiError');
 
 class BaseRepository {
   /**
