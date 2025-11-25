@@ -25,13 +25,13 @@
     "@greycode/gitignore_init": "^0.0.2",
     "@types/node": "^24.10.1",
     "nodemon": "^3.1.11",
-    "prisma": "^7.0.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.0.0",
+    "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.5",
@@ -43,6 +43,7 @@
     "jsonwebtoken": "^9.0.2",
     "morgan": "^1.10.1",
     "pg": "^8.16.3",
+    "prisma": "^7.0.0",
     "winston": "^3.18.3"
   }
 }
