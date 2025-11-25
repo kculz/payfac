@@ -1,145 +1,165 @@
 /**
- * Error Handler Middleware
+ * Optimized Error Handler Middleware
  * 
- * Global error handling middleware for Express.
- * Catches all errors and returns standardized responses.
+ * Clean, formatted error handling that works with existing ApiError classes
+ * No verbose stack traces, only essential information
  * 
  * Location: src/shared/middleware/errorHandler.js
  */
 
 const logger = require('../utils/logger');
-const {
-  ApiError,
+const { 
+  ApiError, 
+  NotFoundError,
+  InternalServerError,
   isOperationalError,
-  fromPrismaError,
-  formatErrorResponse
+  formatErrorResponse 
 } = require('../utils/ApiError');
 const config = require('../../config/environment.config');
 
 /**
- * Handle Prisma errors
- * @param {Error} error - Prisma error
- * @returns {ApiError} Formatted API error
+ * Extract clean error information without verbose stack
  */
-function handlePrismaError(error) {
-  // Check if it's a Prisma error
-  if (error.code && error.code.startsWith('P')) {
-    return fromPrismaError(error);
-  }
-  return null;
-}
-
-/**
- * Handle JWT errors
- * @param {Error} error - JWT error
- * @returns {ApiError|null} Formatted API error or null
- */
-function handleJWTError(error) {
-  if (error.name === 'JsonWebTokenError') {
-    const { UnauthorizedError } = require('../utils/ApiError');
-    return new UnauthorizedError('Invalid token');
-  }
-  if (error.name === 'TokenExpiredError') {
-    const { UnauthorizedError } = require('../utils/ApiError');
-    return new UnauthorizedError('Token has expired');
-  }
-  return null;
-}
-
-/**
- * Handle Multer (file upload) errors
- * @param {Error} error - Multer error
- * @returns {ApiError|null} Formatted API error or null
- */
-function handleMulterError(error) {
-  if (error.name === 'MulterError') {
-    const { BadRequestError } = require('../utils/ApiError');
-    
-    if (error.code === 'LIMIT_FILE_SIZE') {
-      return new BadRequestError('File size exceeds maximum allowed size');
-    }
-    if (error.code === 'LIMIT_FILE_COUNT') {
-      return new BadRequestError('Too many files uploaded');
-    }
-    if (error.code === 'LIMIT_UNEXPECTED_FILE') {
-      return new BadRequestError('Unexpected file field');
-    }
-    
-    return new BadRequestError(`File upload error: ${error.message}`);
-  }
-  return null;
-}
-
-/**
- * Handle validation errors
- * @param {Error} error - Validation error
- * @returns {ApiError|null} Formatted API error or null
- */
-function handleValidationError(error) {
-  if (error.name === 'ValidationError' && error.errors) {
-    const { ValidationError } = require('../utils/ApiError');
-    return new ValidationError(error.errors, error.message);
-  }
-  return null;
-}
-
-/**
- * Log error based on severity
- * @param {Error} error - Error to log
- * @param {Object} req - Express request object
- */
-function logError(error, req) {
+function getCleanErrorInfo(error, req) {
   const errorInfo = {
     message: error.message,
     name: error.name,
-    stack: error.stack,
     code: error.code,
-    statusCode: error.statusCode,
+    statusCode: error.statusCode || 500,
     path: req.path,
     method: req.method,
-    ip: req.ip,
-    userId: req.userId,
-    userAgent: req.get('user-agent'),
-    body: logger.sanitize(req.body),
-    query: req.query,
-    params: req.params
+    userId: req.user?.id || req.userId,
+    timestamp: new Date().toISOString()
   };
 
-  // Determine log level based on error type
-  if (error.statusCode >= 500) {
-    logger.error('Server error occurred', errorInfo);
-  } else if (error.statusCode >= 400) {
-    logger.warn('Client error occurred', errorInfo);
-  } else {
-    logger.error('Unexpected error occurred', errorInfo);
+  // Only include relevant stack information for server errors
+  if (errorInfo.statusCode >= 500 && error.stack) {
+    // Get just the first 2 lines of stack for context
+    const stackLines = error.stack.split('\n').slice(0, 3);
+    errorInfo.stackContext = stackLines.map(line => 
+      line.trim().replace(process.cwd(), '')
+    );
   }
+
+  return errorInfo;
 }
 
 /**
- * Send error response to client
- * @param {Error} error - Error object
- * @param {Object} res - Express response object
+ * Format error response consistently
  */
-function sendErrorResponse(error, res) {
-  const statusCode = error.statusCode || 500;
-  const response = formatErrorResponse(error);
+function formatErrorForResponse(error, req, includeStack = false) {
+  const baseResponse = {
+    success: false,
+    status: error.status || 'error',
+    message: error.message,
+    ...(error.errors && { errors: error.errors }),
+    timestamp: error.timestamp || new Date().toISOString()
+  };
 
-  // In production, don't send stack traces
-  if (config.app.isProduction) {
-    delete response.stack;
+  // Add contextual info for client errors
+  if (error.statusCode >= 400 && error.statusCode < 500) {
+    baseResponse.context = {
+      path: req.path,
+      method: req.method
+    };
   }
 
-  res.status(statusCode).json(response);
+  // Include minimal stack context for server errors in development
+  if (includeStack && error.statusCode >= 500 && error.stack) {
+    const relevantStack = error.stack.split('\n')
+      .slice(0, 3)
+      .map(line => line.trim().replace(process.cwd(), ''));
+    baseResponse.stackContext = relevantStack;
+  }
+
+  return baseResponse;
 }
 
 /**
- * Global error handler middleware
- * Must be the last middleware in the chain
- * 
- * @param {Error} err - Error object
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Next middleware function
+ * Log error with appropriate level and clean format
+ */
+function logError(error, req) {
+  const errorInfo = getCleanErrorInfo(error, req);
+  
+  const logData = {
+    type: error.name,
+    message: error.message,
+    code: error.code,
+    statusCode: errorInfo.statusCode,
+    path: req.path,
+    method: req.method,
+    userId: errorInfo.userId,
+    timestamp: errorInfo.timestamp
+  };
+
+  // Add minimal stack context for server errors only
+  if (errorInfo.statusCode >= 500 && errorInfo.stackContext) {
+    logData.stackContext = errorInfo.stackContext;
+  }
+
+  // Log with appropriate level
+  if (errorInfo.statusCode >= 500) {
+    logger.error('Server Error', logData);
+  } else if (errorInfo.statusCode === 404) {
+    logger.warn('Route Not Found', logData);
+  } else {
+    logger.warn('Client Error', logData);
+  }
+}
+
+/**
+ * Handle common error types and convert to ApiError
+ */
+function normalizeError(error) {
+  // If it's already an ApiError, return as is
+  if (error instanceof ApiError) {
+    return error;
+  }
+
+  // Handle Prisma errors
+  if (error.code && error.code.startsWith('P')) {
+    const { fromPrismaError } = require('../utils/ApiError');
+    return fromPrismaError(error);
+  }
+
+  // Handle JWT errors
+  if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+    const { UnauthorizedError } = require('../utils/ApiError');
+    return new UnauthorizedError('Authentication failed');
+  }
+
+  // Handle validation errors
+  if (error.name === 'ValidationError') {
+    const { ValidationError } = require('../utils/ApiError');
+    return new ValidationError(error.details || error.errors, 'Validation failed');
+  }
+
+  // Handle multer file upload errors
+  if (error.name === 'MulterError') {
+    const { BadRequestError } = require('../utils/ApiError');
+    let message = 'File upload error';
+    
+    if (error.code === 'LIMIT_FILE_SIZE') {
+      message = 'File size exceeds maximum allowed';
+    } else if (error.code === 'LIMIT_FILE_COUNT') {
+      message = 'Too many files uploaded';
+    } else if (error.code === 'LIMIT_UNEXPECTED_FILE') {
+      message = 'Unexpected file field';
+    }
+    
+    return new BadRequestError(message);
+  }
+
+  // Convert to InternalServerError for unknown errors
+  const message = config.app.isProduction 
+    ? 'An unexpected error occurred' 
+    : error.message;
+  
+  return new InternalServerError(message, false);
+}
+
+/**
+ * Main error handler middleware
  */
 function errorHandler(err, req, res, next) {
   // If headers already sent, delegate to default Express error handler
@@ -147,65 +167,31 @@ function errorHandler(err, req, res, next) {
     return next(err);
   }
 
-  let error = err;
+  // Normalize the error (convert to ApiError if needed)
+  const error = normalizeError(err);
 
-  // Convert known error types to ApiError
-  if (!(error instanceof ApiError)) {
-    // Try to handle specific error types
-    error = 
-      handlePrismaError(err) ||
-      handleJWTError(err) ||
-      handleMulterError(err) ||
-      handleValidationError(err);
-
-    // If still not an ApiError, create a generic one
-    if (!error) {
-      const { InternalServerError } = require('../utils/ApiError');
-      error = new InternalServerError(
-        config.app.isProduction 
-          ? 'An unexpected error occurred' 
-          : err.message
-      );
-      error.stack = err.stack;
-    }
-  }
-
-  // Log the error
+  // Log the error (clean format)
   logError(error, req);
 
-  // Send error response
-  sendErrorResponse(error, res);
+  // Determine if we should include stack in response
+  const includeStack = config.app.isDevelopment && error.statusCode >= 500;
+
+  // Format and send error response
+  const response = formatErrorForResponse(error, req, includeStack);
+  res.status(error.statusCode).json(response);
 }
 
 /**
- * 404 Not Found handler
- * Handles routes that don't exist
- * 
- * @param {Object} req - Express request object
- * @param {Object} res - Express response object
- * @param {Function} next - Next middleware function
+ * Clean 404 Not Found handler
  */
 function notFoundHandler(req, res, next) {
-  const { NotFoundError } = require('../utils/ApiError');
-  
-  const error = new NotFoundError('Route');
-  error.message = `Route ${req.method} ${req.path} not found`;
-  
+  const error = new NotFoundError(`Route ${req.method} ${req.path} not found`);
+  error.code = 'ROUTE_NOT_FOUND';
   next(error);
 }
 
 /**
- * Async error wrapper
- * Wraps async route handlers to catch errors
- * 
- * @param {Function} fn - Async function to wrap
- * @returns {Function} Express middleware function
- * 
- * @example
- * router.get('/users', asyncHandler(async (req, res) => {
- *   const users = await userService.getUsers();
- *   res.json(users);
- * }));
+ * Optimized async error wrapper
  */
 function asyncHandler(fn) {
   return (req, res, next) => {
@@ -214,210 +200,164 @@ function asyncHandler(fn) {
 }
 
 /**
- * Handle unhandled promise rejections
+ * Production-optimized error handler (minimal info)
  */
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Promise Rejection', {
-    reason: reason instanceof Error ? reason.message : reason,
-    stack: reason instanceof Error ? reason.stack : undefined,
-    promise: promise.toString()
-  });
-
-  // In production, exit the process
-  if (config.app.isProduction) {
-    logger.error('Shutting down due to unhandled rejection');
-    process.exit(1);
+function productionErrorHandler(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
   }
-});
+
+  const error = normalizeError(err);
+  const statusCode = error.statusCode || 500;
+  const isClientError = statusCode >= 400 && statusCode < 500;
+
+  // Log with minimal info in production
+  if (statusCode >= 500) {
+    logger.error('Production Server Error', {
+      message: error.message,
+      code: error.code,
+      path: req.path,
+      method: req.method,
+      statusCode: statusCode
+    });
+  }
+
+  // Client response - minimal information
+  const response = {
+    success: false,
+    status: error.status || 'error',
+    message: isClientError ? error.message : 'An unexpected error occurred',
+    timestamp: new Date().toISOString()
+  };
+
+  // Only include path for client errors
+  if (isClientError) {
+    response.context = { path: req.path };
+  }
+
+  // Include validation errors if they exist
+  if (isClientError && error.errors) {
+    response.errors = error.errors;
+  }
+
+  res.status(statusCode).json(response);
+}
 
 /**
- * Handle uncaught exceptions
+ * Development error handler (slightly more info but still clean)
  */
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception', {
+function developmentErrorHandler(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  const error = normalizeError(err);
+  const statusCode = error.statusCode || 500;
+
+  // Log with development context
+  const logInfo = {
     message: error.message,
-    stack: error.stack,
-    name: error.name
-  });
+    name: error.name,
+    code: error.code,
+    statusCode: statusCode,
+    path: req.path,
+    method: req.method
+  };
 
-  // Always exit on uncaught exception
-  logger.error('Shutting down due to uncaught exception');
-  process.exit(1);
-});
-
-/**
- * Handle SIGTERM signal (graceful shutdown)
- */
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM signal received: closing HTTP server');
-  
-  // Perform cleanup
-  // Close database connections, etc.
-  
-  process.exit(0);
-});
-
-/**
- * Handle SIGINT signal (Ctrl+C)
- */
-process.on('SIGINT', () => {
-  logger.info('SIGINT signal received: closing HTTP server');
-  
-  // Perform cleanup
-  
-  process.exit(0);
-});
-
-/**
- * Error response formatter for specific error types
- */
-const errorFormatters = {
-  /**
-   * Format database errors
-   */
-  database: (error) => {
-    return {
-      type: 'database_error',
-      message: config.app.isProduction 
-        ? 'A database error occurred' 
-        : error.message,
-      ...(config.app.isDevelopment && { details: error.meta })
-    };
-  },
-
-  /**
-   * Format authentication errors
-   */
-  authentication: (error) => {
-    return {
-      type: 'authentication_error',
-      message: error.message,
-      hint: 'Please check your credentials and try again'
-    };
-  },
-
-  /**
-   * Format authorization errors
-   */
-  authorization: (error) => {
-    return {
-      type: 'authorization_error',
-      message: error.message,
-      hint: 'You do not have permission to access this resource'
-    };
-  },
-
-  /**
-   * Format validation errors
-   */
-  validation: (error) => {
-    return {
-      type: 'validation_error',
-      message: error.message,
-      errors: error.errors
-    };
-  },
-
-  /**
-   * Format payment errors
-   */
-  payment: (error) => {
-    return {
-      type: 'payment_error',
-      message: error.message,
-      ...(error.gatewayError && { gateway: error.gatewayError })
-    };
+  // Include minimal stack context for server errors
+  if (statusCode >= 500 && error.stack) {
+    const stackLines = error.stack.split('\n').slice(0, 3);
+    logInfo.stackContext = stackLines.map(line => line.trim());
   }
-};
+
+  if (statusCode >= 500) {
+    logger.error('Development Server Error', logInfo);
+  } else {
+    logger.warn('Development Client Error', logInfo);
+  }
+
+  // Development response
+  const response = {
+    success: false,
+    status: error.status || 'error',
+    message: error.message,
+    code: error.code || 'INTERNAL_ERROR',
+    timestamp: new Date().toISOString(),
+    context: {
+      path: req.path,
+      method: req.method
+    }
+  };
+
+  // Include validation errors
+  if (error.errors) {
+    response.errors = error.errors;
+  }
+
+  // Include minimal stack for server errors in development
+  if (statusCode >= 500 && error.stack) {
+    const relevantStack = error.stack.split('\n')
+      .slice(0, 3)
+      .map(line => line.trim().replace(process.cwd(), ''));
+    response.stackContext = relevantStack;
+  }
+
+  res.status(statusCode).json(response);
+}
 
 /**
- * Create custom error middleware
- * @param {Function} handler - Custom error handler function
- * @returns {Function} Express middleware
+ * Route validation error handler
+ * Use this in routes to handle validation errors cleanly
  */
-function customErrorHandler(handler) {
-  return (err, req, res, next) => {
-    try {
-      handler(err, req, res, next);
-    } catch (handlerError) {
-      // If custom handler fails, use default
-      errorHandler(err, req, res, next);
+function validateRequest(schema) {
+  return (req, res, next) => {
+    const { error } = schema.validate(req.body, { 
+      abortEarly: false, 
+      stripUnknown: true 
+    });
+
+    if (error) {
+      const { ValidationError } = require('../utils/ApiError');
+      const validationErrors = error.details.map(detail => ({
+        field: detail.path.join('.'),
+        message: detail.message.replace(/"/g, ''),
+        type: detail.type
+      }));
+
+      return next(new ValidationError(validationErrors));
     }
+
+    next();
   };
 }
 
 /**
- * Development error handler (more verbose)
+ * Error handler for specific routes
+ * Use this to wrap route handlers and handle errors consistently
  */
-function developmentErrorHandler(err, req, res, next) {
-  const error = err instanceof ApiError ? err : new ApiError(
-    500,
-    err.message,
-    null,
-    false
-  );
-
-  logError(error, req);
-
-  res.status(error.statusCode || 500).json({
-    success: false,
-    message: error.message,
-    errors: error.errors,
-    stack: error.stack,
-    request: {
-      method: req.method,
-      path: req.path,
-      body: logger.sanitize(req.body),
-      query: req.query,
-      params: req.params
-    },
-    timestamp: new Date().toISOString()
-  });
-}
-
-/**
- * Production error handler (minimal information)
- */
-function productionErrorHandler(err, req, res, next) {
-  const error = err instanceof ApiError ? err : new ApiError(
-    500,
-    'An unexpected error occurred',
-    null,
-    false
-  );
-
-  logError(error, req);
-
-  // Only send operational errors to client
-  if (isOperationalError(error)) {
-    res.status(error.statusCode).json({
-      success: false,
-      message: error.message,
-      errors: error.errors,
-      timestamp: new Date().toISOString()
-    });
-  } else {
-    // For programming errors, send generic message
-    res.status(500).json({
-      success: false,
-      message: 'An unexpected error occurred',
-      timestamp: new Date().toISOString()
-    });
-  }
+function routeErrorHandler(handler) {
+  return async (req, res, next) => {
+    try {
+      await handler(req, res, next);
+    } catch (error) {
+      // Convert to ApiError and pass to error handler
+      const normalizedError = normalizeError(error);
+      next(normalizedError);
+    }
+  };
 }
 
 module.exports = {
   errorHandler,
   notFoundHandler,
   asyncHandler,
-  developmentErrorHandler,
   productionErrorHandler,
-  customErrorHandler,
-  errorFormatters,
+  developmentErrorHandler,
+  validateRequest,
+  routeErrorHandler,
   
-  // Export handlers for specific error types
-  handlePrismaError,
-  handleJWTError,
-  handleMulterError,
-  handleValidationError
+  // Export helper functions for testing
+  normalizeError,
+  formatErrorForResponse,
+  getCleanErrorInfo
 };
