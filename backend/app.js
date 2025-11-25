@@ -4,7 +4,7 @@
  * Main Express application configuration.
  * Sets up middleware, routes, and error handling.
  * 
- * Location: src/app.js
+ * Location: backend/app.js
  */
 
 const express = require('express');
@@ -12,6 +12,7 @@ const helmet = require('helmet');
 const cors = require('cors');
 const morgan = require('morgan');
 const compression = require('compression');
+const path = require('path');
 const config = require('./src/config/environment.config');
 const logger = require('./src/shared/utils/logger');
 const { loadRoutes, printRouteTable } = require('./src/shared/utils/routeLoader');
@@ -86,19 +87,45 @@ app.get('/', (req, res) => {
   });
 });
 
-// Load all API routes automatically
-loadRoutes(app, {
-  versions: ['v1'], // Can add v2, v3, etc.
-  prefix: '/api',
-  verbose: config.app.isDevelopment
-});
+/**
+ * Initialize routes asynchronously
+ */
+async function initializeRoutes() {
+  try {
+    // Load all API routes automatically
+    // routesPath points to backend/api directory
+    const loadedRoutes = await loadRoutes(app, {
+      routesPath: path.join(__dirname, 'api'), // Points to backend/api
+      versions: ['v1'], // Can add v2, v3, etc.
+      prefix: '/api',
+      verbose: config.app.isDevelopment,
+      skipFiles: ['index.js'], // Skip index files
+      allowedExtensions: ['.js', '.route.js'] // Only load .js files
+    });
 
-// Print route table in development
-if (config.app.isDevelopment) {
-  setTimeout(() => {
-    printRouteTable(app);
-  }, 1000);
+    logger.info(`Successfully loaded ${loadedRoutes.length} route(s)`);
+
+    // Print route table in development
+    if (config.app.isDevelopment) {
+      setTimeout(() => {
+        printRouteTable(app);
+      }, 500);
+    }
+
+    return loadedRoutes;
+  } catch (error) {
+    logger.error('Failed to load routes', { 
+      error: error.message,
+      stack: error.stack 
+    });
+    throw error;
+  }
 }
+
+// Initialize routes (async)
+initializeRoutes().catch(error => {
+  logger.error('Route initialization failed', { error: error.message });
+});
 
 // 404 handler (must be after all routes)
 app.use(notFoundHandler);
