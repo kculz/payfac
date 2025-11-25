@@ -87,11 +87,6 @@ const config = {
   // Database Configuration
   database: {
     url: process.env.DATABASE_URL,
-    // Connection pool settings
-    pool: {
-      min: parseInteger(process.env.DB_POOL_MIN, 2),
-      max: parseInteger(process.env.DB_POOL_MAX, 10)
-    },
     // Enable query logging in development
     logging: parseBoolean(process.env.DB_LOGGING, process.env.NODE_ENV === 'development')
   },
