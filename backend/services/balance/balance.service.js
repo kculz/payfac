@@ -55,31 +55,25 @@ class BalanceService {
    */
   async initializeBalance(userId) {
     try {
-      const balance = await balanceRepository.create({
-        user_id: userId,
-        available_balance: 0,
-        pending_balance: 0,
-        reserved_balance: 0,
-        total_earned: 0,
-        total_withdrawn: 0,
-        currency: 'USD'
-      });
+      // Use getOrCreate instead of create to handle duplicates gracefully
+      const balance = await balanceRepository.getOrCreate(userId);
 
       logger.info('Balance initialized', { userId });
 
       return {
-        available: 0,
-        pending: 0,
-        reserved: 0,
-        totalEarned: 0,
-        totalWithdrawn: 0,
-        currency: 'USD',
+        available: parseFloat(balance.available_balance),
+        pending: parseFloat(balance.pending_balance),
+        reserved: parseFloat(balance.reserved_balance),
+        totalEarned: parseFloat(balance.total_earned),
+        totalWithdrawn: parseFloat(balance.total_withdrawn),
+        currency: balance.currency,
         lastUpdated: balance.updated_at
       };
     } catch (error) {
       logger.errorWithContext(error, {
         method: 'initializeBalance',
-        userId
+        userId,
+        error: error.message
       });
       throw new DatabaseError('Failed to initialize balance');
     }
@@ -130,7 +124,7 @@ class BalanceService {
       const currentBalance = await balanceRepository.getOrCreate(userId);
       const balanceBefore = parseFloat(currentBalance.available_balance);
 
-      // Credit balance
+      // Credit balance using repository
       const updatedBalance = await balanceRepository.creditAvailable(userId, amount);
       const balanceAfter = parseFloat(updatedBalance.available_balance);
 
@@ -145,17 +139,17 @@ class BalanceService {
       );
 
       return {
-        available: parseFloat(balance.available_balance),
-        pending: parseFloat(balance.pending_balance),
-        reserved: parseFloat(balance.reserved_balance),
-        totalEarned: parseFloat(balance.total_earned)
+        available: balanceAfter,
+        pending: parseFloat(updatedBalance.pending_balance),
+        reserved: parseFloat(updatedBalance.reserved_balance),
+        totalEarned: parseFloat(updatedBalance.total_earned)
       };
     } catch (error) {
       logger.errorWithContext(error, {
         method: 'creditBalance',
         userId,
         amount,
-        transactionId
+        source
       });
       throw new DatabaseError('Failed to credit balance');
     }
@@ -176,48 +170,21 @@ class BalanceService {
     }
 
     try {
-      return await prisma.$transaction(async (tx) => {
-        // Get current balance with lock
-        const currentBalance = await tx.accountBalance.findUnique({
-          where: { user_id: userId }
-        });
+      const result = await balanceRepository.debitAvailable(userId, amount);
 
-        if (!currentBalance) {
-          throw new NotFoundError('Balance');
-        }
-
-        // Check sufficient balance
-        if (parseFloat(currentBalance.available_balance) < amount) {
-          throw new InsufficientBalanceError(
-            amount,
-            parseFloat(currentBalance.available_balance)
-          );
-        }
-
-        // Debit balance
-        const balance = await tx.accountBalance.update({
-          where: { user_id: userId },
-          data: {
-            available_balance: {
-              decrement: amount
-            }
-          }
-        });
-
-        logger.info('Balance debited', {
-          userId,
-          amount,
-          transactionId,
-          newBalance: balance.available_balance
-        });
-
-        return {
-          available: parseFloat(balance.available_balance),
-          pending: parseFloat(balance.pending_balance),
-          reserved: parseFloat(balance.reserved_balance),
-          totalWithdrawn: parseFloat(balance.total_withdrawn)
-        };
+      logger.info('Balance debited', {
+        userId,
+        amount,
+        transactionId,
+        newBalance: result.available_balance
       });
+
+      return {
+        available: parseFloat(result.available_balance),
+        pending: parseFloat(result.pending_balance),
+        reserved: parseFloat(result.reserved_balance),
+        totalWithdrawn: parseFloat(result.total_withdrawn)
+      };
     } catch (error) {
       logger.errorWithContext(error, {
         method: 'debitBalance',
@@ -243,48 +210,19 @@ class BalanceService {
     }
 
     try {
-      return await prisma.$transaction(async (tx) => {
-        const currentBalance = await tx.accountBalance.findUnique({
-          where: { user_id: userId }
-        });
+      const result = await balanceRepository.reserveFunds(userId, amount);
 
-        if (!currentBalance) {
-          throw new NotFoundError('Balance');
-        }
-
-        // Check sufficient available balance
-        if (parseFloat(currentBalance.available_balance) < amount) {
-          throw new InsufficientBalanceError(
-            amount,
-            parseFloat(currentBalance.available_balance)
-          );
-        }
-
-        // Move funds from available to reserved
-        const balance = await tx.accountBalance.update({
-          where: { user_id: userId },
-          data: {
-            available_balance: {
-              decrement: amount
-            },
-            reserved_balance: {
-              increment: amount
-            }
-          }
-        });
-
-        logger.info('Funds reserved', {
-          userId,
-          amount,
-          newAvailable: balance.available_balance,
-          newReserved: balance.reserved_balance
-        });
-
-        return {
-          available: parseFloat(balance.available_balance),
-          reserved: parseFloat(balance.reserved_balance)
-        };
+      logger.info('Funds reserved', {
+        userId,
+        amount,
+        newAvailable: result.available_balance,
+        newReserved: result.reserved_balance
       });
+
+      return {
+        available: parseFloat(result.available_balance),
+        reserved: parseFloat(result.reserved_balance)
+      };
     } catch (error) {
       logger.errorWithContext(error, {
         method: 'reserveFunds',
@@ -309,28 +247,18 @@ class BalanceService {
     }
 
     try {
-      const balance = await prisma.accountBalance.update({
-        where: { user_id: userId },
-        data: {
-          available_balance: {
-            increment: amount
-          },
-          reserved_balance: {
-            decrement: amount
-          }
-        }
-      });
+      const result = await balanceRepository.releaseReservedFunds(userId, amount);
 
       logger.info('Reserved funds released', {
         userId,
         amount,
-        newAvailable: balance.available_balance,
-        newReserved: balance.reserved_balance
+        newAvailable: result.available_balance,
+        newReserved: result.reserved_balance
       });
 
       return {
-        available: parseFloat(balance.available_balance),
-        reserved: parseFloat(balance.reserved_balance)
+        available: parseFloat(result.available_balance),
+        reserved: parseFloat(result.reserved_balance)
       };
     } catch (error) {
       logger.errorWithContext(error, {
@@ -356,24 +284,17 @@ class BalanceService {
     }
 
     try {
-      const balance = await prisma.accountBalance.update({
-        where: { user_id: userId },
-        data: {
-          reserved_balance: {
-            decrement: amount
-          }
-        }
-      });
+      const result = await balanceRepository.completeReservedTransaction(userId, amount);
 
       logger.info('Reserved transaction completed', {
         userId,
         amount,
-        newReserved: balance.reserved_balance
+        newReserved: result.reserved_balance
       });
 
       return {
-        available: parseFloat(balance.available_balance),
-        reserved: parseFloat(balance.reserved_balance)
+        available: parseFloat(result.available_balance),
+        reserved: parseFloat(result.reserved_balance)
       };
     } catch (error) {
       logger.errorWithContext(error, {
@@ -398,24 +319,17 @@ class BalanceService {
     }
 
     try {
-      const balance = await prisma.accountBalance.update({
-        where: { user_id: userId },
-        data: {
-          pending_balance: {
-            increment: amount
-          }
-        }
-      });
+      const result = await balanceRepository.moveToPending(userId, amount);
 
       logger.info('Funds moved to pending', {
         userId,
         amount,
-        newPending: balance.pending_balance
+        newPending: result.pending_balance
       });
 
       return {
-        available: parseFloat(balance.available_balance),
-        pending: parseFloat(balance.pending_balance)
+        available: parseFloat(result.available_balance),
+        pending: parseFloat(result.pending_balance)
       };
     } catch (error) {
       logger.errorWithContext(error, {
@@ -440,46 +354,19 @@ class BalanceService {
     }
 
     try {
-      return await prisma.$transaction(async (tx) => {
-        const currentBalance = await tx.accountBalance.findUnique({
-          where: { user_id: userId }
-        });
+      const result = await balanceRepository.approvePending(userId, amount);
 
-        if (!currentBalance) {
-          throw new NotFoundError('Balance');
-        }
-
-        if (parseFloat(currentBalance.pending_balance) < amount) {
-          throw new DatabaseError('Insufficient pending balance');
-        }
-
-        const balance = await tx.accountBalance.update({
-          where: { user_id: userId },
-          data: {
-            pending_balance: {
-              decrement: amount
-            },
-            available_balance: {
-              increment: amount
-            },
-            total_earned: {
-              increment: amount
-            }
-          }
-        });
-
-        logger.info('Pending funds approved', {
-          userId,
-          amount,
-          newAvailable: balance.available_balance,
-          newPending: balance.pending_balance
-        });
-
-        return {
-          available: parseFloat(balance.available_balance),
-          pending: parseFloat(balance.pending_balance)
-        };
+      logger.info('Pending funds approved', {
+        userId,
+        amount,
+        newAvailable: result.available_balance,
+        newPending: result.pending_balance
       });
+
+      return {
+        available: parseFloat(result.available_balance),
+        pending: parseFloat(result.pending_balance)
+      };
     } catch (error) {
       logger.errorWithContext(error, {
         method: 'approvePending',
@@ -503,24 +390,17 @@ class BalanceService {
     }
 
     try {
-      const balance = await prisma.accountBalance.update({
-        where: { user_id: userId },
-        data: {
-          pending_balance: {
-            decrement: amount
-          }
-        }
-      });
+      const result = await balanceRepository.rejectPending(userId, amount);
 
       logger.info('Pending funds rejected', {
         userId,
         amount,
-        newPending: balance.pending_balance
+        newPending: result.pending_balance
       });
 
       return {
-        available: parseFloat(balance.available_balance),
-        pending: parseFloat(balance.pending_balance)
+        available: parseFloat(result.available_balance),
+        pending: parseFloat(result.pending_balance)
       };
     } catch (error) {
       logger.errorWithContext(error, {
@@ -541,23 +421,16 @@ class BalanceService {
    */
   async recordWithdrawal(userId, amount) {
     try {
-      const balance = await prisma.accountBalance.update({
-        where: { user_id: userId },
-        data: {
-          total_withdrawn: {
-            increment: amount
-          }
-        }
-      });
+      const result = await balanceRepository.recordWithdrawal(userId, amount);
 
       logger.info('Withdrawal recorded', {
         userId,
         amount,
-        totalWithdrawn: balance.total_withdrawn
+        totalWithdrawn: result.total_withdrawn
       });
 
       return {
-        totalWithdrawn: parseFloat(balance.total_withdrawn)
+        totalWithdrawn: parseFloat(result.total_withdrawn)
       };
     } catch (error) {
       logger.errorWithContext(error, {
@@ -612,11 +485,7 @@ class BalanceService {
    */
   async getMultipleBalances(userIds) {
     try {
-      const balances = await prisma.accountBalance.findMany({
-        where: {
-          user_id: { in: userIds }
-        }
-      });
+      const balances = await balanceRepository.getMultipleBalances(userIds);
 
       return balances.map(balance => ({
         userId: balance.user_id,
@@ -640,25 +509,72 @@ class BalanceService {
    */
   async getTotalAllocated() {
     try {
-      const result = await prisma.accountBalance.aggregate({
-        _sum: {
-          available_balance: true,
-          pending_balance: true,
-          reserved_balance: true
-        }
-      });
+      const result = await balanceRepository.getTotalAllocated();
 
-      const total = 
-        (parseFloat(result._sum.available_balance) || 0) +
-        (parseFloat(result._sum.pending_balance) || 0) +
-        (parseFloat(result._sum.reserved_balance) || 0);
-
-      return total;
+      return result;
     } catch (error) {
       logger.errorWithContext(error, {
         method: 'getTotalAllocated'
       });
       throw new DatabaseError('Failed to get total allocated balance');
+    }
+  }
+
+  /**
+   * Reconcile user balance
+   * @param {string} userId - User ID
+   * @returns {Promise<Object>} Reconciliation result
+   */
+  async reconcileBalance(userId) {
+    try {
+      const result = await ledgerService.reconcileBalance(userId);
+      return result;
+    } catch (error) {
+      logger.errorWithContext(error, {
+        method: 'reconcileBalance',
+        userId
+      });
+      throw new DatabaseError('Failed to reconcile balance');
+    }
+  }
+
+  /**
+   * Get balance history/ledger
+   * @param {string} userId - User ID
+   * @param {Object} filters - Filter options
+   * @param {Object} pagination - Pagination options
+   * @returns {Promise<Object>} Paginated ledger entries
+   */
+  async getBalanceHistory(userId, filters = {}, pagination = {}) {
+    try {
+      const history = await ledgerService.getUserLedger(userId, filters, pagination);
+      return history;
+    } catch (error) {
+      logger.errorWithContext(error, {
+        method: 'getBalanceHistory',
+        userId
+      });
+      throw new DatabaseError('Failed to get balance history');
+    }
+  }
+
+  /**
+   * Get balance statistics
+   * @param {string} userId - User ID
+   * @param {Date} startDate - Start date
+   * @param {Date} endDate - End date
+   * @returns {Promise<Object>} Balance statistics
+   */
+  async getBalanceStats(userId, startDate = null, endDate = null) {
+    try {
+      const stats = await ledgerService.getUserLedgerSummary(userId, startDate, endDate);
+      return stats;
+    } catch (error) {
+      logger.errorWithContext(error, {
+        method: 'getBalanceStats',
+        userId
+      });
+      throw new DatabaseError('Failed to get balance statistics');
     }
   }
 }

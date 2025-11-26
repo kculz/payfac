@@ -11,9 +11,12 @@ const logger = require('../utils/logger');
 const { 
   ApiError, 
   NotFoundError,
+  BadRequestError,
+  UnauthorizedError,
+  ValidationError,
   InternalServerError,
-  isOperationalError,
-  formatErrorResponse 
+  fromPrismaError,
+  fromJoiError
 } = require('../utils/ApiError');
 const config = require('../../config/environment.config');
 
@@ -108,6 +111,14 @@ function logError(error, req) {
 }
 
 /**
+ * Handle Prisma errors and convert to ApiError
+ */
+function handlePrismaError(error) {
+  // Use the imported fromPrismaError function
+  return fromPrismaError(error);
+}
+
+/**
  * Handle common error types and convert to ApiError
  */
 function normalizeError(error) {
@@ -116,27 +127,32 @@ function normalizeError(error) {
     return error;
   }
 
-  // Handle Prisma errors
+  // Handle Prisma errors - FIXED: Use the imported fromPrismaError
   if (error.code && error.code.startsWith('P')) {
-    const { fromPrismaError } = require('../utils/ApiError');
     return fromPrismaError(error);
   }
 
   // Handle JWT errors
-  if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
-    const { UnauthorizedError } = require('../utils/ApiError');
-    return new UnauthorizedError('Authentication failed');
+  if (error.name === 'JsonWebTokenError') {
+    return new UnauthorizedError('Invalid authentication token');
+  }
+  
+  if (error.name === 'TokenExpiredError') {
+    return new UnauthorizedError('Authentication token expired');
   }
 
-  // Handle validation errors
-  if (error.name === 'ValidationError') {
-    const { ValidationError } = require('../utils/ApiError');
-    return new ValidationError(error.details || error.errors, 'Validation failed');
+  // Handle validation errors (Joi)
+  if (error.name === 'ValidationError' && error.details) {
+    return fromJoiError(error);
+  }
+
+  // Handle custom validation errors (from your existing code)
+  if (error.name === 'ValidationError' && Array.isArray(error.errors)) {
+    return new ValidationError(error.errors);
   }
 
   // Handle multer file upload errors
   if (error.name === 'MulterError') {
-    const { BadRequestError } = require('../utils/ApiError');
     let message = 'File upload error';
     
     if (error.code === 'LIMIT_FILE_SIZE') {
@@ -150,12 +166,26 @@ function normalizeError(error) {
     return new BadRequestError(message);
   }
 
+  // Handle MongoDB errors
+  if (error.name === 'MongoError' || error.name === 'MongoServerError') {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue || {})[0] || 'field';
+      return new BadRequestError(`${field} already exists`);
+    }
+    return new InternalServerError('Database operation failed');
+  }
+
+  // Handle CastError (Mongoose ObjectId errors)
+  if (error.name === 'CastError') {
+    return new BadRequestError('Invalid ID format');
+  }
+
   // Convert to InternalServerError for unknown errors
   const message = config.app.isProduction 
     ? 'An unexpected error occurred' 
     : error.message;
   
-  return new InternalServerError(message, false);
+  return new InternalServerError(message);
 }
 
 /**
@@ -309,22 +339,15 @@ function developmentErrorHandler(err, req, res, next) {
  * Route validation error handler
  * Use this in routes to handle validation errors cleanly
  */
-function validateRequest(schema) {
+function validateRequest(schema, property = 'body') {
   return (req, res, next) => {
-    const { error } = schema.validate(req.body, { 
+    const { error } = schema.validate(req[property], { 
       abortEarly: false, 
       stripUnknown: true 
     });
 
     if (error) {
-      const { ValidationError } = require('../utils/ApiError');
-      const validationErrors = error.details.map(detail => ({
-        field: detail.path.join('.'),
-        message: detail.message.replace(/"/g, ''),
-        type: detail.type
-      }));
-
-      return next(new ValidationError(validationErrors));
+      return next(fromJoiError(error));
     }
 
     next();
@@ -354,10 +377,5 @@ module.exports = {
   productionErrorHandler,
   developmentErrorHandler,
   validateRequest,
-  routeErrorHandler,
-  
-  // Export helper functions for testing
-  normalizeError,
-  formatErrorForResponse,
-  getCleanErrorInfo
+  routeErrorHandler
 };

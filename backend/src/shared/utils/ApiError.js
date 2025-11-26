@@ -246,10 +246,14 @@ function isOperationalError(error) {
  * @returns {ValidationError}
  */
 function fromJoiError(joiError) {
+  if (!joiError || !joiError.details) {
+    return new ValidationError([], 'Validation failed');
+  }
+  
   const errors = joiError.details.map(detail => ({
-    field: detail.path.join('.'),
-    message: detail.message,
-    type: detail.type
+    field: detail.path?.join('.') || 'unknown',
+    message: detail.message?.replace(/"/g, '') || 'Invalid value',
+    type: detail.type || 'validation'
   }));
   
   return new ValidationError(errors);
@@ -261,23 +265,164 @@ function fromJoiError(joiError) {
  * @returns {ApiError}
  */
 function fromPrismaError(prismaError) {
+  // Handle cases where prismaError might be null/undefined
+  if (!prismaError) {
+    return new DatabaseError('Unknown database error');
+  }
+
+  // Ensure we have a code property
+  if (!prismaError.code) {
+    return new DatabaseError(
+      'Database operation failed', 
+      prismaError.message || 'Unknown Prisma error'
+    );
+  }
+
   // Prisma error codes: https://www.prisma.io/docs/reference/api-reference/error-reference
+  const meta = prismaError.meta || {};
   
   switch (prismaError.code) {
     case 'P2002': // Unique constraint violation
-      const field = prismaError.meta?.target?.[0] || 'field';
+      const field = meta.target?.[0] || 'field';
       return new ConflictError(`${field} already exists`);
       
     case 'P2025': // Record not found
-      return new NotFoundError('Record');
+      const model = meta.modelName || 'Record';
+      return new NotFoundError(model);
       
     case 'P2003': // Foreign key constraint violation
       return new BadRequestError('Invalid reference to related record');
       
     case 'P2014': // Relation violation
       return new BadRequestError('Cannot delete record due to related records');
-      
+
+    case 'P2000': // Value too long
+      return new ValidationError([{
+        field: meta.column_name || 'field',
+        message: 'Value too long for column',
+        type: 'string.max'
+      }]);
+
+    case 'P2001': // Record not found in where condition
+      return new NotFoundError('Record');
+
+    case 'P2004': // Constraint failed
+      return new BadRequestError('Constraint failed');
+
+    case 'P2005': // Invalid value
+      return new ValidationError([{
+        field: meta.field_name || 'field',
+        message: 'Invalid value provided',
+        type: 'validation'
+      }]);
+
+    case 'P2006': // Invalid value for field type
+      return new ValidationError([{
+        field: meta.field_name || 'field',
+        message: 'Invalid value type for field',
+        type: 'validation'
+      }]);
+
+    case 'P2007': // Data validation error
+      return new ValidationError([{
+        field: meta.field_name || 'field',
+        message: 'Data validation error',
+        type: 'validation'
+      }]);
+
+    case 'P2008': // Query parsing error
+      return new BadRequestError('Invalid query parameters');
+
+    case 'P2009': // Query validation error
+      return new BadRequestError('Query validation failed');
+
+    case 'P2010': // Raw query error
+      return new DatabaseError('Database query failed');
+
+    case 'P2011': // Null constraint violation
+      return new ValidationError([{
+        field: meta.constraint || 'field',
+        message: 'This field cannot be null',
+        type: 'any.required'
+      }]);
+
+    case 'P2012': // Missing required value
+      return new ValidationError([{
+        field: meta.path || 'field',
+        message: 'This field is required',
+        type: 'any.required'
+      }]);
+
+    case 'P2013': // Missing required argument
+      return new BadRequestError('Missing required argument');
+
+    case 'P2015': // Related record not found
+      return new NotFoundError('Related record');
+
+    case 'P2016': // Query interpretation error
+      return new BadRequestError('Query interpretation error');
+
+    case 'P2017': // Records not connected
+      return new BadRequestError('Records are not connected');
+
+    case 'P2018': // Required connected records not found
+      return new NotFoundError('Required connected records');
+
+    case 'P2019': // Input error
+      return new BadRequestError('Input error');
+
+    case 'P2020': // Value out of range
+      return new ValidationError([{
+        field: meta.field_name || 'field',
+        message: 'Value out of range',
+        type: 'number.range'
+      }]);
+
+    case 'P2021': // Table does not exist
+      return new DatabaseError('Database table not found');
+
+    case 'P2022': // Column does not exist
+      return new DatabaseError('Database column not found');
+
+    case 'P2023': // Inconsistent column data
+      return new DatabaseError('Inconsistent column data');
+
+    case 'P2024': // Connection timeout
+      return new ServiceUnavailableError('Database');
+
+    case 'P2026': // Database server error
+      return new DatabaseError('Database server error');
+
+    case 'P2027': // Multiple errors occurred
+      return new DatabaseError('Multiple database errors occurred');
+
+    case 'P2030': // Fulltext index not found
+      return new DatabaseError('Search index not found');
+
+    case 'P2031': // MongoDB replica set error
+      return new DatabaseError('Database replication error');
+
+    case 'P2033': // Number out of 64-bit range
+      return new ValidationError([{
+        field: meta.field_name || 'field',
+        message: 'Number out of valid range',
+        type: 'number.range'
+      }]);
+
+    case 'P2034': // Transaction failed
+      return new DatabaseError('Database transaction failed');
+
+    case 'P2035': // Assertion violation
+      return new DatabaseError('Database assertion failed');
+
+    case 'P2036': // External connector error
+      return new ServiceUnavailableError('Database connector');
+
+    case 'P2037': // Too many database connections
+      return new ServiceUnavailableError('Database connections exhausted');
+
     default:
+      // For unknown Prisma errors, provide a generic database error
       return new DatabaseError(
         'Database operation failed',
         prismaError.message
