@@ -7,7 +7,9 @@
  */
 
 const receiptService = require('../../../services/receipt/receipt.service');
+const receiptRepository = require('../../../database/repositories/receipt.repository');
 const { successResponse, createdResponse } = require('../../../src/shared/utils/response');
+const { BadRequestError, NotFoundError } = require('../../../src/shared/utils/ApiError');
 
 class ReceiptController {
   /**
@@ -271,6 +273,161 @@ class ReceiptController {
         res,
         receiptData,
         'Receipt formatted for printing'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ============================================================================
+  // ADMIN METHODS
+  // ============================================================================
+
+  /**
+   * @desc    Get all receipts (Admin only)
+   * @route   GET /api/v1/receipts/admin/all
+   * @access  Private (Admin)
+   */
+  async getAllReceipts(req, res, next) {
+    try {
+      const { page = 1, limit = 20, startDate, endDate, userId } = req.query;
+
+      const filters = {
+        startDate: startDate ? new Date(startDate) : null,
+        endDate: endDate ? new Date(endDate) : null,
+        userId
+      };
+
+      const pagination = {
+        page: parseInt(page),
+        limit: parseInt(limit)
+      };
+
+      const receipts = await receiptRepository.findAll(filters, pagination);
+
+      return successResponse(
+        res,
+        receipts,
+        'All receipts retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @desc    Get receipt statistics (Admin only)
+   * @route   GET /api/v1/receipts/admin/stats
+   * @access  Private (Admin)
+   */
+  async getReceiptStats(req, res, next) {
+    try {
+      const { startDate, endDate } = req.query;
+
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+
+      const stats = await receiptRepository.getAdminStats(start, end);
+
+      return successResponse(
+        res,
+        stats,
+        'Receipt statistics retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @desc    Force email receipt (Admin override)
+   * @route   POST /api/v1/receipts/admin/email/:receiptId
+   * @access  Private (Admin)
+   */
+  async adminEmailReceipt(req, res, next) {
+    try {
+      const adminId = req.userId;
+      const { receiptId } = req.params;
+      const { email } = req.body;
+
+      // Get receipt first to verify it exists
+      const receipt = await receiptRepository.findById(receiptId);
+
+      if (!receipt) {
+        throw new NotFoundError('Receipt');
+      }
+
+      // Use the email service to send the receipt
+      const emailService = require('../../../services/email/email.service');
+      await emailService.sendReceiptEmail(receipt, email, adminId);
+
+      // Update receipt emailed_at timestamp
+      await receiptRepository.updateEmailedAt(receiptId);
+
+      return successResponse(
+        res,
+        {
+          receipt_id: receiptId,
+          receipt_number: receipt.receipt_number,
+          email_sent_to: email,
+          sent_by_admin: adminId
+        },
+        'Receipt emailed successfully (admin override)'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @desc    Get receipt analytics (Admin only)
+   * @route   GET /api/v1/receipts/admin/analytics
+   * @access  Private (Admin)
+   */
+  async getReceiptAnalytics(req, res, next) {
+    try {
+      const { startDate, endDate } = req.query;
+
+      const start = startDate ? new Date(startDate) : null;
+      const end = endDate ? new Date(endDate) : null;
+
+      const analytics = await receiptRepository.getAnalytics(start, end);
+
+      return successResponse(
+        res,
+        analytics,
+        'Receipt analytics retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * @desc    Get receipts by date range (Admin only)
+   * @route   GET /api/v1/receipts/admin/by-date
+   * @access  Private (Admin)
+   */
+  async getReceiptsByDateRange(req, res, next) {
+    try {
+      const { startDate, endDate, page = 1, limit = 50 } = req.query;
+
+      if (!startDate || !endDate) {
+        throw new BadRequestError('Both startDate and endDate are required');
+      }
+
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+
+      const receipts = await receiptRepository.findByDateRange(start, end, {
+        page: parseInt(page),
+        limit: parseInt(limit)
+      });
+
+      return successResponse(
+        res,
+        receipts,
+        'Receipts by date range retrieved successfully'
       );
     } catch (error) {
       next(error);
