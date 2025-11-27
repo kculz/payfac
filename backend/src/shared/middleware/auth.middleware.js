@@ -318,7 +318,7 @@ async function verifyRefreshToken(req, res, next) {
     const decoded = verifyToken(refreshToken, config.jwt.refreshSecret);
 
     // Check if refresh token exists in database
-    const tokenRecord = await userRepository.model.refreshToken.findUnique({
+    const tokenRecord = await userRepository.prismaClient.refreshToken.findUnique({
       where: { token: refreshToken }
     });
 
@@ -489,7 +489,7 @@ async function generateTokens(user) {
   const { token: refreshToken, expiresAt } = generateRefreshToken(user);
 
   // Store refresh token in database
-  await userRepository.model.refreshToken.create({
+ await userRepository.prismaClient.refreshToken.create({
     data: {
       user_id: user.id,
       token: refreshToken,
@@ -510,7 +510,7 @@ async function generateTokens(user) {
  * @returns {Promise<void>}
  */
 async function revokeRefreshToken(token) {
-  await userRepository.model.refreshToken.updateMany({
+ await userRepository.prismaClient.refreshToken.updateMany({
     where: { token },
     data: { revoked_at: new Date() }
   });
@@ -525,7 +525,7 @@ async function revokeRefreshToken(token) {
  * @returns {Promise<void>}
  */
 async function revokeAllUserTokens(userId) {
-  const result = await userRepository.model.refreshToken.updateMany({
+  const result = await userRepository.prismaClient.refreshToken.updateMany({
     where: {
       user_id: userId,
       revoked_at: null

@@ -8,12 +8,14 @@
  */
 
 const BaseRepository = require('./base.repository');
+const { prisma } = require('../../src/config/database.config');
 const { ConflictError, NotFoundError } = require('../../src/shared/utils/ApiError');
 const logger = require('../../src/shared/utils/logger');
 
 class UserRepository extends BaseRepository {
   constructor() {
     super('user');
+    this.prismaClient = prisma;
   }
 
   /**
