@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to Payment Facilitator Platform</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .content h2 {
+            color: #667eea;
+            font-size: 24px;
+            margin-top: 0;
+        }
+        .content p {
+            margin: 15px 0;
+            font-size: 16px;
+        }
+        .button {
+            display: inline-block;
+            padding: 14px 32px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff !important;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 20px 0;
+            font-weight: 600;
+            font-size: 16px;
+        }
+        .features {
+            background-color: #f9f9f9;
+            padding: 25px;
+            border-radius: 8px;
+            margin: 25px 0;
+        }
+        .features ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .features li {
+            margin: 10px 0;
+            font-size: 15px;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #666666;
+            border-top: 1px solid #eeeeee;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 Welcome to Payment Facilitator Platform</h1>
+        </div>
+        
+        <div class="content">
+            <h2>Hello {{userName}}! 👋</h2>
+            
+            <p>Welcome aboard! We're thrilled to have you join the Payment Facilitator Platform community.</p>
+            
+            <p>Your account (<strong>{{email}}</strong>) has been successfully created and you're now ready to start managing your transactions with ease.</p>
+            
+            <div style="text-align: center;">
+                <a href="{{dashboardUrl}}" class="button">Go to Dashboard</a>
+            </div>
+            
+            <div class="features">
+                <h3 style="margin-top: 0; color: #667eea;">What you can do:</h3>
+                <ul>
+                    <li>✨ Manage your account balance and transactions</li>
+                    <li>💳 Process sales and receive payments</li>
+                    <li>💰 Request deposits and payouts</li>
+                    <li>📊 Track your transaction history</li>
+                    <li>📧 Generate receipts and invoices</li>
+                    <li>🔒 Secure and encrypted transactions</li>
+                </ul>
+            </div>
+            
+            <p><strong>Getting Started:</strong></p>
+            <ol>
+                <li>Log in to your dashboard</li>
+                <li>Complete your profile information</li>
+                <li>Request your first deposit</li>
+                <li>Start processing transactions</li>
+            </ol>
+            
+            <p>If you have any questions or need assistance, our support team is here to help!</p>
+            
+            <p>Best regards,<br>
+            <strong>Payment Facilitator Platform Team</strong></p>
+        </div>
+        
+        <div class="footer">
+            <p>Need help? Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>© {{year}} Payment Facilitator Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

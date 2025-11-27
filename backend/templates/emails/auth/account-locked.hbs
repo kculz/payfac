@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Account Temporarily Locked</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            margin: 0;
+            padding: 0;
+            background-color: #f4f4f4;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        .header {
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: #ffffff;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 40px 30px;
+        }
+        .content h2 {
+            color: #dc3545;
+            font-size: 24px;
+            margin-top: 0;
+        }
+        .content p {
+            margin: 15px 0;
+            font-size: 16px;
+        }
+        .alert-box {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .alert-box .lock-time {
+            font-size: 24px;
+            font-weight: 700;
+            color: #dc3545;
+            margin: 10px 0;
+        }
+        .info-box {
+            background-color: #d1ecf1;
+            border-left: 4px solid #17a2b8;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .footer {
+            background-color: #f9f9f9;
+            padding: 30px;
+            text-align: center;
+            font-size: 14px;
+            color: #666666;
+            border-top: 1px solid #eeeeee;
+        }
+        .footer a {
+            color: #dc3545;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔒 Account Locked</h1>
+        </div>
+        
+        <div class="content">
+            <h2>Hello {{userName}},</h2>
+            
+            <p>Your account has been temporarily locked due to multiple failed login attempts. This is a security measure to protect your account from unauthorized access.</p>
+            
+            <div class="alert-box">
+                <strong>Your account will be automatically unlocked in:</strong>
+                <div class="lock-time">{{lockDuration}} minutes</div>
+            </div>
+            
+            <p><strong>Why was my account locked?</strong></p>
+            <p>Our system detected multiple unsuccessful login attempts to your account. To prevent unauthorized access, we've temporarily locked your account as a security precaution.</p>
+            
+            <div class="info-box">
+                <strong>💡 What happens next?</strong>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>Your account will automatically unlock after {{lockDuration}} minutes</li>
+                    <li>You can then log in normally with your password</li>
+                    <li>Failed login attempts will be reset to zero</li>
+                </ul>
+            </div>
+            
+            <p><strong>Security Recommendations:</strong></p>
+            <ul>
+                <li>✓ Make sure you're using the correct password</li>
+                <li>✓ Check if Caps Lock is turned off</li>
+                <li>✓ Use the "Forgot Password" feature if you can't remember your password</li>
+                <li>✓ Ensure you're accessing the legitimate website</li>
+                <li>✓ Scan your device for malware</li>
+            </ul>
+            
+            <p><strong>Concerned about unauthorized access?</strong></p>
+            <p>If you believe someone else is trying to access your account, please contact our support team immediately. We can help you secure your account and investigate the issue.</p>
+            
+            <p style="margin-top: 30px;">For immediate assistance, please contact our support team.</p>
+            
+            <p>Best regards,<br>
+            <strong>Payment Facilitator Platform Security Team</strong></p>
+        </div>
+        
+        <div class="footer">
+            <p><strong>Need help?</strong> Contact us at <a href="mailto:{{supportEmail}}">{{supportEmail}}</a></p>
+            <p>© {{year}} Payment Facilitator Platform. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
