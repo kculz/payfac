@@ -44,7 +44,7 @@ export interface ApiErrorResponse {
 /**
  * Create axios instance
  */
-const apiClient: AxiosInstance = axios.create({
+export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30000,
   headers: {
